@@ -131,7 +131,7 @@ def handle_calculate_IK(req):
 
             ### Your IK code here 
             # Compensate for rotation discrepancy between DH parameters and Gazebo
-            Rot_Error = ROT_z.subs(y, radians(180)) * ROT_y.subs(p, radians(-90))
+            Rot_Error = Rot_z.subs(y, radians(180)) * Rot_y.subs(p, radians(-90))
 
             ROT_EE = ROT_EE * Rot_Error
             ROT_EE = ROT_EE.subs({'r': roll, 'p': pitch, 'y': yaw})
@@ -186,3 +186,4 @@ def IK_server():
 
 if __name__ == "__main__":
     IK_server()
+
