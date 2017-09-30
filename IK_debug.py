@@ -1,7 +1,7 @@
 from sympy import *
 from time import time
 from mpmath import radians
-import tf
+import tensorflow as tf
 
 '''
 Format of test case is [ [[EE position],[EE orientation as quaternions]],[WC location],[joint angles]]
@@ -63,13 +63,107 @@ def test_code(test_case):
     ## 
 
     ## Insert IK code here!
+    d1, d2, d3, d4, d5, d6, d7 = symbols('d1:8')
+    a0, a1, a2, a3, a4, a5, a6 = symbols('a0:7')
+    q1, q2, q3, q4, q5, q6, q7 = symbols('q1:8')
+    alp0, alp1, alp2, alp3, alp4, alp5, alp6 = symbols('alp0:7')
+
+    #            
+    # Define Modified DH Transformation matrix
+    DH_table = { 
+            alp0:       0,  a0:      0,  d1:  0.75, q1:  q1,
+            alp1: -pi/2.0,  a1:   0.35,  d2:     0, q2:  -pi/2.0 + q2,
+            alp2:       0,  a2:   1.25,  d3:     0, q3:  q3,
+            alp3: -pi/2.0,  a3: -0.054,  d4:   1.5, q4:  q4,
+            alp4:  pi/2.0,  a4:      0,  d5:     0, q5:  q5,
+            alp5: -pi/2.0,  a5:      0,  d6:     0, q6:  q6,
+            alp6: 0,        a6:      0,  d7: 0.303, q7:  0
+    }
+
+    def Get_TFMartix(alpha, a, d, q):
+        TF_Matrix = Matrix([
+            [ cos(q),               -sin(q),            0,              a    ],
+            [sin(q)*cos(alpha), cos(q)*cos(alpha), -sin(alpha), -sin(alpha)*d],
+            [sin(q)*sin(alpha), cos(q)*sin(alpha),  cos(alpha),  cos(alpha)*d],
+            [       0,                  0,              0,              1    ]
+            ])
+        return TF_Matrix
+
+    #
+    # Create individual transformation matrices
+    T0_1 = Get_TFMartix(alp0, a0, d1, q1).subs(DH_table)
+    T1_2 = Get_TFMartix(alp1, a1, d2, q2).subs(DH_table)
+    T2_3 = Get_TFMartix(alp2, a2, d3, q3).subs(DH_table)
+    T3_4 = Get_TFMartix(alp3, a3, d4, q4).subs(DH_table)
+    T4_5 = Get_TFMartix(alp4, a4, d5, q5).subs(DH_table)
+    T5_6 = Get_TFMartix(alp5, a5, d6, q6).subs(DH_table)
+    T6_EE = Get_TFMartix(alp6, a6, d7, q7).subs(DH_table)
+
+    T0_EE = T0_1 * T1_2 * T2_3 * T3_4 * T4_5 * T5_6 * T6_EE
+
+    px = req.poses[x].position.x
+    py = req.poses[x].position.y
+    pz = req.poses[x].position.z
+
+    (roll, pitch, yaw) = tf.transformations.euler_from_quaternion(
+        [req.poses[x].orientation.x, req.poses[x].orientation.y,
+            req.poses[x].orientation.z, req.poses[x].orientation.w])
     
-    theta1 = 0
-    theta2 = 0
-    theta3 = 0
-    theta4 = 0
-    theta5 = 0
-    theta6 = 0
+    r, p, y = symbols('r p y')
+
+    Rot_x = Matrix([    [1,     0,  0],
+            [0, cos(r), -sin(r)],
+            [0, sin(r), cos(r)]])
+
+    Rot_y = Matrix([    [ cos(p),        0,  sin(p)],
+                    [       0,        1,        0],
+                    [-sin(p),        0,     cos(p)] ])
+
+    Rot_z = Matrix([    [ cos(y),   -sin(y),     0],
+                    [ sin(y),   cos(y),      0],
+                    [ 0,              0,         1]]) 
+
+    ROT_EE = Rot_z*Rot_y*Rot_x
+
+
+    ### Your IK code here 
+    # Compensate for rotation discrepancy between DH parameters and Gazebo
+    Rot_Error = Rot_z.subs(y, radians(180)) * Rot_y.subs(p, radians(-90))
+
+    ROT_EE = ROT_EE * Rot_Error
+    ROT_EE = ROT_EE.subs({'r': roll, 'p': pitch, 'y': yaw})
+
+    EE = Matrix([[px],
+                 [py],
+                 [pz]])
+
+    WC = EE - (.303) * ROT_EE[:, 2]
+    # Calculate joint angles using Geometric IK method
+    #
+    theta1 = atan2(WC[1], WC[0])
+
+    side_a = 1.501
+    side_b = sqrt(pow((sqrt(WC[0] + WC[1]*WC[1]) - 0.35),2) + pow((WC[2] - 0.75),2))    
+    side_c= 1.25
+    
+    angle_a = acos((side_b * side_b + side_c * side_c - side_a * side_a) / (2 * side_b * side_c))
+    angle_b = acos((side_a * side_a + side_c * side_c - side_b * side_b) / (2 * side_a * side_c))
+    angle_c = acos((side_a * side_a + side_b * side_b - side_c * side_c) / (2 * side_a * side_b))
+
+    theta2 = pi / 2 - angle_a - atan2(WC[2] - .75, sqrt(WC[0] * WC[0] + WC[1] * WC[1]) - 0.35)
+    theta3 = pi / 2 - (angle_b + .036)  # .036 accounts for sag in link4 of -.054m
+
+    R0_3 = T0_1[0:3, 0:3] * T1_2[0:3, 0:3] * T2_3[0:3, 0:3]
+    R0_3 = R0_3.evalf(subs={q1: theta1, q2: theta2, q3: theta3})
+
+    R3_6 = R0_3.transpose() * ROT_EE
+
+    # Euler angles from rotation matrix
+    # More information can be found in the Euler Angles from a Rotation Matrix section
+
+    theta4 = atan2(R3_6[2, 2], -R3_6[0, 2])
+    theta5 = atan2(sqrt(R3_6[0, 2] * R3_6[0, 2] + R3_6[2, 2] * R3_6[2, 2]), R3_6[1, 2])
+    theta6 = atan2(-R3_6[1, 1], R3_6[1, 0])
 
     ## 
     ########################################################################################
