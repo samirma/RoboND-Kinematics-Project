@@ -52,6 +52,7 @@ Links | alpha(i-1) | a(i-1) | d(i) | theta(i)
 
 I used the following method and calls in order to create the tranformation matrices 
 
+''
   def Get_TFMartix(alpha, a, d, q):
       TF_Matrix = Matrix([
           [ cos(q),               -sin(q),            0,              a    ],
@@ -61,8 +62,8 @@ I used the following method and calls in order to create the tranformation matri
           ])
       return TF_Matrix
 
-  #
-  # Create individual transformation matrices
+    #Create individual transformation matrices
+    
     T0_1 = Get_TFMartix(alp0, a0, d1, q1).subs(DH_table)
     T1_2 = Get_TFMartix(alp1, a1, d2, q2).subs(DH_table)
     T2_3 = Get_TFMartix(alp2, a2, d3, q3).subs(DH_table)
@@ -70,6 +71,7 @@ I used the following method and calls in order to create the tranformation matri
     T4_5 = Get_TFMartix(alp4, a4, d5, q5).subs(DH_table)
     T5_6 = Get_TFMartix(alp5, a5, d6, q6).subs(DH_table)
     T6_EE = Get_TFMartix(alp6, a6, d7, q7).subs(DH_table)
+''
 
 #### 3. Decouple Inverse Kinematics problem into Inverse Position Kinematics and inverse Orientation Kinematics; doing so derive the equations to calculate all individual joint angles.
 
